@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Regata Web GPS Mejorado</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<style>
+  html, body { margin:0; height:100%; font-family:sans-serif; }
+  #map { height:100%; }
+  .controls {
+    position:absolute; top:10px; left:10px; background: rgba(255,255,255,0.95);
+    padding:10px; border-radius:10px; z-index:1000; max-width:250px;
+  }
+  .controls button, .controls select, .controls input { margin:2px; padding:5px 8px; width:100%; box-sizing:border-box; }
+  .info { margin-top:5px; }
+  .wind-arrow { width:0; height:0; border-left:10px solid transparent; border-right:10px solid transparent; border-bottom:20px solid red; transform-origin:center bottom; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="controls">
+  <label>Tipo marcador:</label>
+  <select id="markerType">
+    <option value="committee">Comité</option>
+    <option value="buoy">Boya</option>
+    <option value="arrival">Llegada</option>
+  </select>
+  <button onclick="addMarkerManual()">Añadir Marcador por Coordenadas</button>
+  <hr>
+  <div class="info">
+    <div>Velocidad: <span id="speed">0</span> m/s</div>
+    <div>Distancia a línea: <span id="distLine">0</span> m</div>
+    <div>ETA: <span id="eta">0</span> s</div>
+    <div>Lado: <span id="side">-</span></div>
+    <div>Cuenta atrás: <span id="countdown">60</span> s</div>
+    <div>Dirección de movimiento: <span id="direction">-</span>°</div>
+  </div>
+  <div>
+    <input type="number" id="countInput" placeholder="Tiempo cuenta atrás (s)" />
+    <button onclick="startCountdown()">Iniciar</button>
+    <button onclick="pauseCountdown()">Pausar</button>
+    <button onclick="resumeCountdown()">Reanudar</button>
+    <button onclick="resetCountdown()">Reiniciar</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+const map = L.map('map').setView([37.7749, -122.4194], 14);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+let gpsPos = null, gpsSpeed = 0, gpsPrev = null;
+let markers = [];
+let buoys = [];
+let committee = null;
+let countdown = 60;
+let countdownInterval = null;
+let windDir = 45; // dirección de viento (inicial)
+
+// Geolocalización
+if(navigator.geolocation){
+  navigator.geolocation.watchPosition(pos=>{
+    gpsPrev = gpsPos;
+    gpsPos={lat: pos.coords.latitude, lng: pos.coords.longitude};
+    gpsSpeed = pos.coords.speed || 0;
+    document.getElementById('speed').innerText = gpsSpeed.toFixed(2);
+
+    // Calcular dirección de movimiento
+    if(gpsPrev){
+      const dir = bearing(gpsPrev,gpsPos);
+      windDir = dir; // asumimos que viento viene de la dirección de movimiento
+      document.getElementById('direction').innerText = dir.toFixed(0);
+    }
+
+    updateInfo();
+  },err=>console.warn(err),{enableHighAccuracy:true, maximumAge:500});
+}
+
+// Funciones geodésicas
+function distanceMeters(a,b){
+  const R=6371000;
+  const dLat=(b.lat-a.lat)*Math.PI/180;
+  const dLon=(b.lng-a.lng)*Math.PI/180;
+  const lat1=a.lat*Math.PI/180;
+  const lat2=b.lat*Math.PI/180;
+  const h=Math.sin(dLat/2)**2 + Math.sin(dLon/2)**2*Math.cos(lat1)*Math.cos(lat2);
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+function bearing(a,b){
+  const lat1=a.lat*Math.PI/180;
+  const lat2=b.lat*Math.PI/180;
+  const dLon=(b.lng-a.lng)*Math.PI/180;
+  const y=Math.sin(dLon)*Math.cos(lat2);
+  const x=Math.cos(lat1)*Math.sin(lat2)-Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLon);
+  return ((Math.atan2(y,x)*180/Math.PI)+360)%360;
+}
+function destinationPoint(from,brg,dist){
+  const R=6371000;
+  const δ=dist/R;
+  const θ=brg*Math.PI/180;
+  const φ1=from.lat*Math.PI/180;
+  const λ1=from.lng*Math.PI/180;
+  const φ2=Math.asin(Math.sin(φ1)*Math.cos(δ)+Math.cos(φ1)*Math.sin(δ)*Math.cos(θ));
+  const λ2=λ1+Math.atan2(Math.sin(θ)*Math.sin(δ)*Math.cos(φ1),Math.cos(δ)-Math.sin(φ1)*Math.sin(φ2));
+  return {lat: φ2*180/Math.PI,lng: λ2*180/Math.PI};
+}
+
+// Añadir marcador manual
+function addMarkerManual(){
+  const type = document.getElementById('markerType').value;
+  const lat = parseFloat(prompt("Latitud:"));
+  const lng = parseFloat(prompt("Longitud:"));
+  if(isNaN(lat)||isNaN(lng)) return alert("Coordenadas inválidas");
+  addMarker({lat,lng}, type);
+}
+
+// Añadir marcador al mapa
+function addMarker(pos, type){
+  let iconUrl='https://cdn-icons-png.flaticon.com/512/684/684908.png';
+  if(type==='buoy') iconUrl='https://cdn-icons-png.flaticon.com/512/684/684901.png';
+  if(type==='arrival') iconUrl='https://cdn-icons-png.flaticon.com/512/684/684915.png';
+  const m = L.marker(pos,{icon:L.icon({iconUrl,iconSize:[32,32]}), draggable:true}).addTo(map);
+  m.type = type;
+  markers.push(m);
+  if(type==='buoy') buoys.push(pos);
+  if(type==='committee') committee=pos;
+
+  // Long press / click derecho sobre marcador
+  m.on('contextmenu', e=>{
+    const typeSelect = prompt("Nuevo tipo: committee, buoy, arrival (cancel para mantener)","");
+    if(typeSelect==='committee'||typeSelect==='buoy'||typeSelect==='arrival'){ 
+      updateMarkerIcon(m,typeSelect); m.type=typeSelect;
+    }
+    const deleteMarker = confirm("¿Eliminar marcador?");
+    if(deleteMarker){ map.removeLayer(m); markers=markers.filter(x=>x!==m); }
+    updateInfo();
+  });
+}
+
+// Cambiar icono
+function updateMarkerIcon(marker,type){
+  let url='https://cdn-icons-png.flaticon.com/512/684/684908.png';
+  if(type==='buoy') url='https://cdn-icons-png.flaticon.com/512/684/684901.png';
+  if(type==='arrival') url='https://cdn-icons-png.flaticon.com/512/684/684915.png';
+  marker.setIcon(L.icon({iconUrl:url,iconSize:[32,32]}));
+}
+
+// Long press en mapa
+let pressTimer;
+map.on('mousedown', e=>{ pressTimer=setTimeout(()=>{ 
+  const type = document.getElementById('markerType').value;
+  addMarker(e.latlng,type);
+},800); }); // 800ms
+map.on('mouseup mouseleave', e=>clearTimeout(pressTimer));
+
+// Laylines
+function drawLaylines(){
+  map.eachLayer(l=>{if(l.options && l.options.dashArray) map.removeLayer(l);});
+  if(!buoys.length) return;
+  const tacking = 45;
+  const b = buoys[0];
+  const left = destinationPoint(b,windDir+tacking,2000);
+  const right = destinationPoint(b,windDir-tacking,2000);
+  L.polyline([b,left],{color:'blue',dashArray:'5,10'}).addTo(map);
+  L.polyline([b,right],{color:'blue',dashArray:'5,10'}).addTo(map);
+}
+
+// Actualizar info
+function updateInfo(){
+  if(!gpsPos || !committee || !buoys.length) return;
+  const d = distanceMeters(gpsPos, buoys[0]);
+  document.getElementById('distLine').innerText = d.toFixed(1);
+  const eta = (gpsSpeed>0)?(d/gpsSpeed).toFixed(1):'-';
+  document.getElementById('eta').innerText = eta;
+  const brgLine = bearing(gpsPos, buoys[0]);
+  const side = (Math.abs(brgLine-windDir)<90)?'Bueno':'Malo';
+  document.getElementById('side').innerText = side;
+}
+
+// Cuenta atrás
+function startCountdown(){
+  const val = parseInt(document.getElementById('countInput').value);
+  if(!isNaN(val)) countdown=val;
+  if(countdownInterval) clearInterval(countdownInterval);
+  countdownInterval=setInterval(()=>{
+    if(countdown>0) countdown--;
+    document.getElementById('countdown').innerText = countdown;
+    updateInfo(); drawLaylines();
+  },1000);
+}
+function pauseCountdown(){ clearInterval(countdownInterval); countdownInterval=null; }
+function resumeCountdown(){ if(!countdownInterval) startCountdown(); }
+function resetCountdown(){ pauseCountdown(); countdown = parseInt(document.getElementById('countInput').value)||60; document.getElementById('countdown').innerText=countdown; }
+
+</script>
+</body>
+</html>
