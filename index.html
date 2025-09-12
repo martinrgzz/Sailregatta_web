@@ -50,15 +50,20 @@
 
 <script src="https://cdn.jsdelivr.net/npm/ol@v7.4.0/dist/ol.js"></script>
 <script>
+// --- Proyección helpers ---
+const R = 6378137;
+function lonToX(lon){ return lon * Math.PI/180 * R }
+function latToY(lat){ return Math.log(Math.tan((90+lat)*Math.PI/360)) * R }
+function xyFromLonLat([lon,lat]){ return [lonToX(lon), latToY(lat)] }
+function lonLatFromXY([x,y]){ const lon = x / R * 180/Math.PI; const lat = (2*Math.atan(Math.exp(y/R)) - Math.PI/2) * 180/Math.PI; return [lon,lat] }
+function haversine(a,b){ const toR=Math.PI/180; const [lon1,lat1]=a; const [lon2,lat2]=b; const dlat=(lat2-lat1)*toR; const dlon=(lon2-lon1)*toR; const A=Math.sin(dlat/2)**2 + Math.cos(lat1*toR)*Math.cos(lat2*toR)*Math.sin(dlon/2)**2; return R*2*Math.atan2(Math.sqrt(A),Math.sqrt(1-A)); }
+function pointToSegmentDistance(p,a,b){ const P=xyFromLonLat(p), A=xyFromLonLat(a), B=xyFromLonLat(b); const vx=B[0]-A[0], vy=B[1]-A[1]; const wx=P[0]-A[0], wy=P[1]-A[1]; const c1=vx*wx+vy*wy; if(c1<=0) return Math.hypot(P[0]-A[0], P[1]-A[1]); const c2=vx*vx+vy*vy; if(c2<=c1) return Math.hypot(P[0]-B[0], P[1]-B[1]); const t=c1/c2; const projx=A[0]+t*vx, projy=A[1]+t*vy; return Math.hypot(P[0]-projx, P[1]-projy); }
+
 // --- Mapas ---
 const dayLayer = new ol.layer.Tile({ source: new ol.source.XYZ({ url:'https://cartodb-basemaps-a.global.ssl.fastly.net/rastertiles/voyager/{z}/{x}/{y}.png' }) });
 const nightLayer = new ol.layer.Tile({ source: new ol.source.XYZ({ url:'https://cartodb-basemaps-a.global.ssl.fastly.net/rastertiles/dark_all/{z}/{x}/{y}.png' }), visible:false });
 
-const map = new ol.Map({
-  target:'map',
-  layers:[dayLayer, nightLayer],
-  view:new ol.View({ center: ol.proj.fromLonLat([0,0]), zoom:3 })
-});
+const map = new ol.Map({ target:'map', layers:[dayLayer, nightLayer], view:new ol.View({ center: ol.proj.fromLonLat([0,0]), zoom:3 }) });
 
 // --- Vectors ---
 const vectorSource = new ol.source.Vector();
@@ -84,7 +89,6 @@ function setShip(lonlat, headingDeg){
     const dx=offsetM*Math.sin(theta);
     const dy=offsetM*Math.cos(theta);
     const XY=[lonToX(lonlat[0])+dx, latToY(lonlat[1])+dy];
-    finalLonLat=[XY[0], XY[1]]; // usar coordenadas mercator
     finalLonLat=lonLatFromXY(XY);
   }
   if(!shipFeature){
@@ -106,12 +110,24 @@ function drawLineIfReady(){ if(portFeature && starFeature){
   lineFeature.setStyle(lineStyle); vectorSource.addFeature(lineFeature);
 }}
 
-// --- Long press ---
-let pressTimer=null, pressCoord=null;
+// --- Long press fluido ---
+let pressTimer=null, pressCoord=null, startPixel=null;
+const threshold=5;
 map.getViewport().addEventListener('pointerdown', e=>{
-  pressTimer=setTimeout(()=>{ pressCoord=map.getEventCoordinate(e); showContext(e.clientX,e.clientY); }, 600);
+  startPixel=[e.clientX,e.clientY];
+  pressTimer=setTimeout(()=>{
+    pressCoord=map.getEventCoordinate(e);
+    showContext(e.clientX,e.clientY);
+  },600);
 });
-map.getViewport().addEventListener('pointerup', ()=>{ if(pressTimer){clearTimeout(pressTimer); pressTimer=null;} });
+map.getViewport().addEventListener('pointermove', e=>{
+  if(pressTimer){
+    const dx=e.clientX-startPixel[0], dy=e.clientY-startPixel[1];
+    if(Math.hypot(dx,dy)>threshold){ clearTimeout(pressTimer); pressTimer=null; }
+  }
+});
+map.getViewport().addEventListener('pointerup', ()=>{ if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; } });
+
 function showContext(x,y){
   const feature = map.forEachFeatureAtPixel([x,y], f=>f);
   const menu=document.createElement('div'); menu.className='context'; menu.style.left=x+'px'; menu.style.top=y+'px';
@@ -179,8 +195,6 @@ document.getElementById('startTimer').onclick=startTimer;
 document.getElementById('pauseTimer').onclick=pauseTimer;
 document.getElementById('resetTimer').onclick=resetTimer;
 resetTimer();
-
-window.addEventListener('beforeunload',()=>{});
 </script>
 </body>
 </html>
