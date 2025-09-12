@@ -1,197 +1,324 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<title>Regata Web GPS Mejorado</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-<style>
-  html, body { margin:0; height:100%; font-family:sans-serif; }
-  #map { height:100%; }
-  .controls {
-    position:absolute; top:10px; left:10px; background: rgba(255,255,255,0.95);
-    padding:10px; border-radius:10px; z-index:1000; max-width:250px;
-  }
-  .controls button, .controls select, .controls input { margin:2px; padding:5px 8px; width:100%; box-sizing:border-box; }
-  .info { margin-top:5px; }
-  .wind-arrow { width:0; height:0; border-left:10px solid transparent; border-right:10px solid transparent; border-bottom:20px solid red; transform-origin:center bottom; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>SailRegatta Web</title>
+  <!-- OpenLayers desde CDN oficial -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/ol.css">
+  <script src="https://cdn.jsdelivr.net/npm/ol@latest/ol.js"></script>
+  <style>
+    html, body, #map { 
+      height:100%; 
+      margin:0; 
+      padding:0; 
+      width: 100%; /* Añadido para asegurar que ocupe todo el ancho */
+    }
+    #map { 
+      position:fixed; 
+      inset:0; 
+      background: #aad3df; /* Color de fondo temporal para verificar que el contenedor es visible */
+    }
+    body { 
+      font-family: Arial, sans-serif; 
+      background:#000; 
+      color:#fff; 
+      overflow: hidden; /* Previene barras de desplazamiento */
+    }
+
+    .topbar {
+      position:fixed; 
+      top:10px; 
+      left:50%; 
+      transform:translateX(-50%);
+      background:rgba(20,20,20,0.85); 
+      color:#fff;
+      padding:6px 12px; 
+      border-radius:10px;
+      display:flex; 
+      gap:10px; 
+      align-items:center;
+      z-index:2000; 
+      box-shadow:0 2px 6px rgba(0,0,0,0.6);
+    }
+    .side-btn {
+      position:fixed; 
+      top:50%; 
+      transform:translateY(-50%);
+      background:rgba(20,20,20,0.85); 
+      color:#fff; 
+      border:none;
+      padding:10px 14px; 
+      border-radius:12px;
+      font-size:14px; 
+      font-weight:600;
+      z-index:2000; 
+      cursor:pointer;
+      box-shadow:0 2px 6px rgba(0,0,0,0.6);
+    }
+    #leftBtn { left:10px; }
+    #rightBtn { right:10px; }
+    .side-btn:hover { background:rgba(40,40,40,0.9); }
+
+    #info {
+      position:fixed; 
+      bottom:12px; 
+      left:50%; 
+      transform:translateX(-50%);
+      background:rgba(20,20,20,0.85); 
+      color:#fff;
+      padding:8px 14px; 
+      border-radius:10px;
+      z-index:2000; 
+      font-size:14px;
+      box-shadow:0 2px 6px rgba(0,0,0,0.6);
+      text-align:center;
+    }
+
+    .context {
+      position:fixed; 
+      background:#222; 
+      color:#fff;
+      border:1px solid #555; 
+      padding:8px; 
+      border-radius:8px;
+      z-index:3000; 
+      font-size:14px;
+      box-shadow:0 2px 6px rgba(0,0,0,0.6);
+    }
+    .context button {
+      margin:3px; 
+      padding:6px 10px;
+      background:#333; 
+      color:#fff; 
+      border:none;
+      border-radius:6px; 
+      cursor:pointer;
+    }
+    .context button:hover { background:#555; }
+  </style>
 </head>
 <body>
-<div id="map"></div>
-<div class="controls">
-  <label>Tipo marcador:</label>
-  <select id="markerType">
-    <option value="committee">Comité</option>
-    <option value="buoy">Boya</option>
-    <option value="arrival">Llegada</option>
-  </select>
-  <button onclick="addMarkerManual()">Añadir Marcador por Coordenadas</button>
-  <hr>
-  <div class="info">
-    <div>Velocidad: <span id="speed">0</span> m/s</div>
-    <div>Distancia a línea: <span id="distLine">0</span> m</div>
-    <div>ETA: <span id="eta">0</span> s</div>
-    <div>Lado: <span id="side">-</span></div>
-    <div>Cuenta atrás: <span id="countdown">60</span> s</div>
-    <div>Dirección de movimiento: <span id="direction">-</span>°</div>
+  <div id="map"></div>
+
+  <div class="topbar">
+    <label>Cuenta atrás (min): 
+      <input id="countMin" type="number" value="5" min="0" step="1" style="width:60px">
+    </label>
+    <button id="startTimer">Iniciar</button>
+    <button id="pauseTimer">Pausar</button>
+    <button id="resetTimer">Reiniciar</button>
+    <div id="timerDisplay" style="min-width:80px; text-align:center; font-weight:600;">00:00</div>
   </div>
-  <div>
-    <input type="number" id="countInput" placeholder="Tiempo cuenta atrás (s)" />
-    <button onclick="startCountdown()">Iniciar</button>
-    <button onclick="pauseCountdown()">Pausar</button>
-    <button onclick="resumeCountdown()">Reanudar</button>
-    <button onclick="resetCountdown()">Reiniciar</button>
-  </div>
-</div>
 
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script>
-const map = L.map('map').setView([37.7749, -122.4194], 14);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+  <button id="leftBtn" class="side-btn">Babor (coords)</button>
+  <button id="rightBtn" class="side-btn">Estribor (coords)</button>
 
-let gpsPos = null, gpsSpeed = 0, gpsPrev = null;
-let markers = [];
-let buoys = [];
-let committee = null;
-let countdown = 60;
-let countdownInterval = null;
-let windDir = 45; // dirección de viento (inicial)
+  <div id="info">Distancia a línea: -- m | Tiempo a línea: -- | Diferencia: --</div>
 
-// Geolocalización
-if(navigator.geolocation){
-  navigator.geolocation.watchPosition(pos=>{
-    gpsPrev = gpsPos;
-    gpsPos={lat: pos.coords.latitude, lng: pos.coords.longitude};
-    gpsSpeed = pos.coords.speed || 0;
-    document.getElementById('speed').innerText = gpsSpeed.toFixed(2);
+  <script>
+  // --- Utilidades ---
+  const R = 6378137;
+  function lonToX(lon){ return lon * Math.PI/180 * R }
+  function latToY(lat){ return Math.log(Math.tan((90+lat)*Math.PI/360)) * R }
+  function xyFromLonLat([lon,lat]){ return [lonToX(lon), latToY(lat)] }
+  function lonLatFromXY([x,y]){
+    const lon = x / R * 180/Math.PI;
+    const lat = (2*Math.atan(Math.exp(y/R)) - Math.PI/2) * 180/Math.PI;
+    return [lon,lat];
+  }
+  function pointToSegmentDistance(p, a, b){
+    const P=xyFromLonLat(p), A=xyFromLonLat(a), B=xyFromLonLat(b);
+    const vx=B[0]-A[0], vy=B[1]-A[1]; const wx=P[0]-A[0], wy=P[1]-A[1];
+    const c1 = vx*wx+vy*wy;
+    if(c1<=0) return Math.hypot(P[0]-A[0],P[1]-A[1]);
+    const c2 = vx*vx+vy*vy;
+    if(c2<=c1) return Math.hypot(P[0]-B[0],P[1]-B[1]);
+    const t = c1/c2; const projx=A[0]+t*vx, projy=A[1]+t*vy;
+    return Math.hypot(P[0]-projx,P[1]-projy);
+  }
+  function formatSec(s){
+    const sign=s<0?'-':''; s=Math.abs(Math.round(s));
+    const mm=Math.floor(s/60), ss=s%60;
+    return `${sign}${mm}m${String(ss).padStart(2,'0')}s`;
+  }
 
-    // Calcular dirección de movimiento
-    if(gpsPrev){
-      const dir = bearing(gpsPrev,gpsPos);
-      windDir = dir; // asumimos que viento viene de la dirección de movimiento
-      document.getElementById('direction').innerText = dir.toFixed(0);
+  // --- Mapa ---
+  // Asegurarse de que el DOM esté completamente cargado antes de inicializar el mapa
+  document.addEventListener('DOMContentLoaded', function() {
+    const view = new ol.View({ 
+      center: ol.proj.fromLonLat([-3.70379, 40.4168]), // Centrado en Madrid como ejemplo
+      zoom: 10 
+    });
+    
+    const map = new ol.Map({
+      target: 'map',
+      layers: [ 
+        new ol.layer.Tile({ 
+          source: new ol.source.OSM({
+            // Añadir parámetros para evitar problemas de carga de teselas
+            crossOrigin: 'anonymous'
+          }) 
+        }) 
+      ],
+      view: view,
+      // Añadir controles por defecto para mejor usabilidad
+      controls: ol.control.defaults().extend([
+        new ol.control.Zoom(),
+        new ol.control.Rotate(),
+        new ol.control.Attribution()
+      ])
+    });
+
+    const vectorSource = new ol.source.Vector();
+    const vectorLayer = new ol.layer.Vector({ source: vectorSource });
+    map.addLayer(vectorLayer);
+
+    const shipStyle = new ol.style.Style({ image: new ol.style.Icon({
+      src:'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24"><path fill="#0b5" d="M12 2l3 7h-6l3-7z"/><path fill="#064" d="M5 12h14l-1 6H6l-1-6z"/></svg>',
+      scale:1.2, rotateWithView:true
+    }) });
+    const portStyle = new ol.style.Style({ image: new ol.style.Circle({ radius:8, fill:new ol.style.Fill({color:'#ff4d4d'}), stroke:new ol.style.Stroke({color:'#fff',width:2}) }) });
+    const starStyle = new ol.style.Style({ image: new ol.style.Circle({ radius:8, fill:new ol.style.Fill({color:'#4da6ff'}), stroke:new ol.style.Stroke({color:'#fff',width:2}) }) });
+    const lineStyle = new ol.style.Style({ stroke:new ol.style.Stroke({ color:'#ffbf00', width:4 }) });
+
+    let shipFeature=null, portFeature=null, starFeature=null, lineFeature=null;
+
+    function setShip(lonlat, headingDeg){
+      const offsetM = 11; // fijo hacia proa
+      let finalLonLat=lonlat;
+      if(!isNaN(headingDeg)){
+        const theta = headingDeg*Math.PI/180;
+        const dx = offsetM * Math.sin(theta); // hacia proa
+        const dy = offsetM * Math.cos(theta);
+        const XY = xyFromLonLat(lonlat);
+        const newXY=[XY[0]+dx, XY[1]+dy];
+        finalLonLat=lonLatFromXY(newXY);
+      }
+      if(!shipFeature){
+        shipFeature=new ol.Feature(new ol.geom.Point(ol.proj.fromLonLat(finalLonLat)));
+        shipFeature.setStyle(shipStyle); vectorSource.addFeature(shipFeature);
+      } else {
+        shipFeature.getGeometry().setCoordinates(ol.proj.fromLonLat(finalLonLat));
+      }
+      view.animate({ center: ol.proj.fromLonLat(finalLonLat), duration:400 });
     }
 
-    updateInfo();
-  },err=>console.warn(err),{enableHighAccuracy:true, maximumAge:500});
-}
-
-// Funciones geodésicas
-function distanceMeters(a,b){
-  const R=6371000;
-  const dLat=(b.lat-a.lat)*Math.PI/180;
-  const dLon=(b.lng-a.lng)*Math.PI/180;
-  const lat1=a.lat*Math.PI/180;
-  const lat2=b.lat*Math.PI/180;
-  const h=Math.sin(dLat/2)**2 + Math.sin(dLon/2)**2*Math.cos(lat1)*Math.cos(lat2);
-  return 2*R*Math.asin(Math.sqrt(h));
-}
-function bearing(a,b){
-  const lat1=a.lat*Math.PI/180;
-  const lat2=b.lat*Math.PI/180;
-  const dLon=(b.lng-a.lng)*Math.PI/180;
-  const y=Math.sin(dLon)*Math.cos(lat2);
-  const x=Math.cos(lat1)*Math.sin(lat2)-Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLon);
-  return ((Math.atan2(y,x)*180/Math.PI)+360)%360;
-}
-function destinationPoint(from,brg,dist){
-  const R=6371000;
-  const δ=dist/R;
-  const θ=brg*Math.PI/180;
-  const φ1=from.lat*Math.PI/180;
-  const λ1=from.lng*Math.PI/180;
-  const φ2=Math.asin(Math.sin(φ1)*Math.cos(δ)+Math.cos(φ1)*Math.sin(δ)*Math.cos(θ));
-  const λ2=λ1+Math.atan2(Math.sin(θ)*Math.sin(δ)*Math.cos(φ1),Math.cos(δ)-Math.sin(φ1)*Math.sin(φ2));
-  return {lat: φ2*180/Math.PI,lng: λ2*180/Math.PI};
-}
-
-// Añadir marcador manual
-function addMarkerManual(){
-  const type = document.getElementById('markerType').value;
-  const lat = parseFloat(prompt("Latitud:"));
-  const lng = parseFloat(prompt("Longitud:"));
-  if(isNaN(lat)||isNaN(lng)) return alert("Coordenadas inválidas");
-  addMarker({lat,lng}, type);
-}
-
-// Añadir marcador al mapa
-function addMarker(pos, type){
-  let iconUrl='https://cdn-icons-png.flaticon.com/512/684/684908.png';
-  if(type==='buoy') iconUrl='https://cdn-icons-png.flaticon.com/512/684/684901.png';
-  if(type==='arrival') iconUrl='https://cdn-icons-png.flaticon.com/512/684/684915.png';
-  const m = L.marker(pos,{icon:L.icon({iconUrl,iconSize:[32,32]}), draggable:true}).addTo(map);
-  m.type = type;
-  markers.push(m);
-  if(type==='buoy') buoys.push(pos);
-  if(type==='committee') committee=pos;
-
-  // Long press / click derecho sobre marcador
-  m.on('contextmenu', e=>{
-    const typeSelect = prompt("Nuevo tipo: committee, buoy, arrival (cancel para mantener)","");
-    if(typeSelect==='committee'||typeSelect==='buoy'||typeSelect==='arrival'){ 
-      updateMarkerIcon(m,typeSelect); m.type=typeSelect;
+    function addPort(lonlat){
+      if(portFeature) return;
+      portFeature=new ol.Feature(new ol.geom.Point(ol.proj.fromLonLat(lonlat)));
+      portFeature.setStyle(portStyle); vectorSource.addFeature(portFeature); drawLineIfReady();
     }
-    const deleteMarker = confirm("¿Eliminar marcador?");
-    if(deleteMarker){ map.removeLayer(m); markers=markers.filter(x=>x!==m); }
-    updateInfo();
+    function addStar(lonlat){
+      if(starFeature) return;
+      starFeature=new ol.Feature(new ol.geom.Point(ol.proj.fromLonLat(lonlat)));
+      starFeature.setStyle(starStyle); vectorSource.addFeature(starFeature); drawLineIfReady();
+    }
+    function drawLineIfReady(){
+      if(portFeature && starFeature){
+        if(lineFeature) vectorSource.removeFeature(lineFeature);
+        const p=portFeature.getGeometry().getCoordinates();
+        const s=starFeature.getGeometry().getCoordinates();
+        lineFeature=new ol.Feature(new ol.geom.LineString([p,s]));
+        lineFeature.setStyle(lineStyle); vectorSource.addFeature(lineFeature);
+      }
+    }
+
+    // Long press
+    let pressTimer=null, pressCoord=null;
+    map.getViewport().addEventListener('pointerdown', e=>{
+      pressTimer=setTimeout(()=>{
+        pressCoord=map.getEventCoordinate(e);
+        showContext(e.clientX,e.clientY);
+      },600);
+    });
+    map.getViewport().addEventListener('pointerup',()=>{ if(pressTimer){clearTimeout(pressTimer);pressTimer=null;} });
+
+    function showContext(x,y){
+      const menu=document.createElement('div');
+      menu.className='context'; menu.style.left=x+'px'; menu.style.top=y+'px';
+      menu.innerHTML='<div style="font-weight:600;margin-bottom:6px">Poner marca</div>'+
+        '<button id="ctxPort">Babor</button> <button id="ctxStar">Estribor</button><br>'+
+        '<button id="ctxClose">Cerrar</button>';
+      document.body.appendChild(menu);
+      document.getElementById('ctxPort').onclick=()=>{addPort(ol.proj.toLonLat(pressCoord));menu.remove();};
+      document.getElementById('ctxStar').onclick=()=>{addStar(ol.proj.toLonLat(pressCoord));menu.remove();};
+      document.getElementById('ctxClose').onclick=()=>menu.remove();
+    }
+
+    // Botones coordenadas
+    document.getElementById('leftBtn').onclick=()=>{
+      const lat=parseFloat(prompt('Latitud (dec):'));
+      const lon=parseFloat(prompt('Longitud (dec):'));
+      if(!isNaN(lat)&&!isNaN(lon)) addPort([lon,lat]);
+    };
+    document.getElementById('rightBtn').onclick=()=>{
+      const lat=parseFloat(prompt('Latitud (dec):'));
+      const lon=parseFloat(prompt('Longitud (dec):'));
+      if(!isNaN(lat)&&!isNaN(lon)) addStar([lon,lat]);
+    };
+
+    // Geolocalización
+    let watchId=null;
+    const latestState={ position:null, speed:null };
+    if('geolocation' in navigator){
+      watchId=navigator.geolocation.watchPosition(pos=>{
+        const lonlat=[pos.coords.longitude,pos.coords.latitude];
+        const heading=pos.coords.heading;
+        const speed=pos.coords.speed;
+        latestState.position=lonlat; latestState.speed=speed;
+        setShip(lonlat, heading!==null?heading:0);
+      }, err=>console.warn('GPS err',err), { enableHighAccuracy:true, maximumAge:1000, timeout:10000 });
+    } else {
+      console.warn('Geolocalización no soportada');
+      // Establecer una posición por defecto para pruebas
+      setShip([-3.70379, 40.4168], 0);
+    }
+
+    // Computos
+    function computeAndUpdate(){
+      const info=document.getElementById('info');
+      if(!latestState.position||!portFeature||!starFeature){
+        info.innerText='Distancia a línea: -- m | Tiempo a línea: -- | Diferencia: --'; return;
+      }
+      const p=ol.proj.toLonLat(portFeature.getGeometry().getCoordinates());
+      const s=ol.proj.toLonLat(starFeature.getGeometry().getCoordinates());
+      const pos=latestState.position;
+      const dist=pointToSegmentDistance(pos,p,s);
+      const speed=latestState.speed;
+      let timeToLine=null; if(speed&&speed>0) timeToLine=dist/speed;
+      const remaining=timer.remainingSeconds;
+      let diff=null; if(timeToLine!==null) diff=timeToLine-remaining;
+      info.innerText=`Distancia: ${dist.toFixed(1)} m | Tiempo: ${timeToLine?formatSec(timeToLine):'--'} | Dif: ${diff!==null?formatSec(diff):'--'}`;
+    }
+    setInterval(computeAndUpdate,900);
+
+    // Timer
+    const timer={ totalSeconds:0, remainingSeconds:0, running:false, interval:null };
+    function startTimer(){
+      const mins=parseFloat(document.getElementById('countMin').value)||0;
+      if(!timer.running){
+        if(timer.remainingSeconds<=0) timer.remainingSeconds=Math.round(mins*60);
+        timer.running=true;
+        timer.interval=setInterval(()=>{
+          if(timer.remainingSeconds>0){ timer.remainingSeconds--; updateTimerDisplay(); }
+          else{ clearInterval(timer.interval); timer.running=false; }
+        },1000);
+      }
+    }
+    function pauseTimer(){ if(timer.running){ clearInterval(timer.interval); timer.running=false; } }
+    function resetTimer(){ pauseTimer(); timer.remainingSeconds=Math.round((parseFloat(document.getElementById('countMin').value)||0)*60); updateTimerDisplay(); }
+    function updateTimerDisplay(){
+      const d=timer.remainingSeconds; const mm=Math.floor(d/60); const ss=d%60;
+      document.getElementById('timerDisplay').innerText=`${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+    }
+    document.getElementById('startTimer').onclick=()=>startTimer();
+    document.getElementById('pauseTimer').onclick=()=>pauseTimer();
+    document.getElementById('resetTimer').onclick=()=>resetTimer();
+    resetTimer();
+
+    window.addEventListener('beforeunload',()=>{ if(watchId!==null) navigator.geolocation.clearWatch(watchId); });
   });
-}
-
-// Cambiar icono
-function updateMarkerIcon(marker,type){
-  let url='https://cdn-icons-png.flaticon.com/512/684/684908.png';
-  if(type==='buoy') url='https://cdn-icons-png.flaticon.com/512/684/684901.png';
-  if(type==='arrival') url='https://cdn-icons-png.flaticon.com/512/684/684915.png';
-  marker.setIcon(L.icon({iconUrl:url,iconSize:[32,32]}));
-}
-
-// Long press en mapa
-let pressTimer;
-map.on('mousedown', e=>{ pressTimer=setTimeout(()=>{ 
-  const type = document.getElementById('markerType').value;
-  addMarker(e.latlng,type);
-},800); }); // 800ms
-map.on('mouseup mouseleave', e=>clearTimeout(pressTimer));
-
-// Laylines
-function drawLaylines(){
-  map.eachLayer(l=>{if(l.options && l.options.dashArray) map.removeLayer(l);});
-  if(!buoys.length) return;
-  const tacking = 45;
-  const b = buoys[0];
-  const left = destinationPoint(b,windDir+tacking,2000);
-  const right = destinationPoint(b,windDir-tacking,2000);
-  L.polyline([b,left],{color:'blue',dashArray:'5,10'}).addTo(map);
-  L.polyline([b,right],{color:'blue',dashArray:'5,10'}).addTo(map);
-}
-
-// Actualizar info
-function updateInfo(){
-  if(!gpsPos || !committee || !buoys.length) return;
-  const d = distanceMeters(gpsPos, buoys[0]);
-  document.getElementById('distLine').innerText = d.toFixed(1);
-  const eta = (gpsSpeed>0)?(d/gpsSpeed).toFixed(1):'-';
-  document.getElementById('eta').innerText = eta;
-  const brgLine = bearing(gpsPos, buoys[0]);
-  const side = (Math.abs(brgLine-windDir)<90)?'Bueno':'Malo';
-  document.getElementById('side').innerText = side;
-}
-
-// Cuenta atrás
-function startCountdown(){
-  const val = parseInt(document.getElementById('countInput').value);
-  if(!isNaN(val)) countdown=val;
-  if(countdownInterval) clearInterval(countdownInterval);
-  countdownInterval=setInterval(()=>{
-    if(countdown>0) countdown--;
-    document.getElementById('countdown').innerText = countdown;
-    updateInfo(); drawLaylines();
-  },1000);
-}
-function pauseCountdown(){ clearInterval(countdownInterval); countdownInterval=null; }
-function resumeCountdown(){ if(!countdownInterval) startCountdown(); }
-function resetCountdown(){ pauseCountdown(); countdown = parseInt(document.getElementById('countInput').value)||60; document.getElementById('countdown').innerText=countdown; }
-
-</script>
+  </script>
 </body>
 </html>
