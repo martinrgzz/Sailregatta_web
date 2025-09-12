@@ -1,324 +1,186 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>SailRegatta Web</title>
-  <!-- OpenLayers desde CDN oficial -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/ol.css">
-  <script src="https://cdn.jsdelivr.net/npm/ol@latest/ol.js"></script>
-  <style>
-    html, body, #map { 
-      height:100%; 
-      margin:0; 
-      padding:0; 
-      width: 100%; /* Añadido para asegurar que ocupe todo el ancho */
-    }
-    #map { 
-      position:fixed; 
-      inset:0; 
-      background: #aad3df; /* Color de fondo temporal para verificar que el contenedor es visible */
-    }
-    body { 
-      font-family: Arial, sans-serif; 
-      background:#000; 
-      color:#fff; 
-      overflow: hidden; /* Previene barras de desplazamiento */
-    }
-
-    .topbar {
-      position:fixed; 
-      top:10px; 
-      left:50%; 
-      transform:translateX(-50%);
-      background:rgba(20,20,20,0.85); 
-      color:#fff;
-      padding:6px 12px; 
-      border-radius:10px;
-      display:flex; 
-      gap:10px; 
-      align-items:center;
-      z-index:2000; 
-      box-shadow:0 2px 6px rgba(0,0,0,0.6);
-    }
-    .side-btn {
-      position:fixed; 
-      top:50%; 
-      transform:translateY(-50%);
-      background:rgba(20,20,20,0.85); 
-      color:#fff; 
-      border:none;
-      padding:10px 14px; 
-      border-radius:12px;
-      font-size:14px; 
-      font-weight:600;
-      z-index:2000; 
-      cursor:pointer;
-      box-shadow:0 2px 6px rgba(0,0,0,0.6);
-    }
-    #leftBtn { left:10px; }
-    #rightBtn { right:10px; }
-    .side-btn:hover { background:rgba(40,40,40,0.9); }
-
-    #info {
-      position:fixed; 
-      bottom:12px; 
-      left:50%; 
-      transform:translateX(-50%);
-      background:rgba(20,20,20,0.85); 
-      color:#fff;
-      padding:8px 14px; 
-      border-radius:10px;
-      z-index:2000; 
-      font-size:14px;
-      box-shadow:0 2px 6px rgba(0,0,0,0.6);
-      text-align:center;
-    }
-
-    .context {
-      position:fixed; 
-      background:#222; 
-      color:#fff;
-      border:1px solid #555; 
-      padding:8px; 
-      border-radius:8px;
-      z-index:3000; 
-      font-size:14px;
-      box-shadow:0 2px 6px rgba(0,0,0,0.6);
-    }
-    .context button {
-      margin:3px; 
-      padding:6px 10px;
-      background:#333; 
-      color:#fff; 
-      border:none;
-      border-radius:6px; 
-      cursor:pointer;
-    }
-    .context button:hover { background:#555; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SailRegatta Web</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.4.0/ol.css">
+<style>
+  html, body, #map { height: 100%; margin:0; }
+  #map { position: fixed; inset:0; }
+  .topbar{
+    position:fixed; top:8px; left:50%; transform:translateX(-50%);
+    background:rgba(30,30,30,0.7); color:#fff; padding:6px 12px;
+    border-radius:12px; font-family:Arial; display:flex; gap:8px;
+    align-items:center; z-index:2000; backdrop-filter:blur(6px);}
+  .side-btn{
+    position:fixed; top:50%; transform:translateY(-50%);
+    background:rgba(30,30,30,0.7); color:#fff; padding:10px 14px;
+    border-radius:12px; font-family:Arial; z-index:2000; border:none; cursor:pointer }
+  #leftBtn{ left:10px } #rightBtn{ right:10px }
+  #nightBtn{ position:fixed; top:8px; right:10px; background:rgba(30,30,30,0.7); color:#fff; padding:6px 12px; border-radius:8px; cursor:pointer; z-index:2000; }
+  #info{
+    position:fixed; bottom:8px; left:50%; transform:translateX(-50%);
+    background:rgba(30,30,30,0.8); color:#fff; padding:8px 14px;
+    border-radius:12px; z-index:2000; font-family:Arial; font-size:14px; backdrop-filter:blur(6px);}
+  .context{
+    position:fixed; background:#fff; border:1px solid #ccc; padding:6px;
+    border-radius:6px; z-index:3000; font-family:Arial }
+  #gpsError{
+    position:fixed; bottom:50px; left:50%; transform:translateX(-50%);
+    background:rgba(200,0,0,0.8); color:#fff; padding:6px 10px;
+    border-radius:8px; font-family:Arial; display:none; z-index:4000; }
+  button{ cursor:pointer; border:none; border-radius:6px; padding:4px 8px; }
+</style>
 </head>
 <body>
-  <div id="map"></div>
+<div id="map"></div>
+<div class="topbar">
+  <label>Cuenta atrás (min): <input id="countMin" type="number" value="5" min="0" step="1" style="width:60px"></label>
+  <button id="startTimer">Iniciar</button>
+  <button id="pauseTimer">Pausar</button>
+  <button id="resetTimer">Reiniciar</button>
+  <div id="timerDisplay" style="min-width:80px; text-align:center; font-weight:600;">00:00</div>
+</div>
+<button id="leftBtn" class="side-btn">Babor</button>
+<button id="rightBtn" class="side-btn">Estribor</button>
+<button id="nightBtn">Modo Noche</button>
+<div id="info">Dist: -- m | Tiempo línea: -- | Δ cuenta: --</div>
+<div id="gpsError">⚠️ No se pudo acceder al GPS</div>
 
-  <div class="topbar">
-    <label>Cuenta atrás (min): 
-      <input id="countMin" type="number" value="5" min="0" step="1" style="width:60px">
-    </label>
-    <button id="startTimer">Iniciar</button>
-    <button id="pauseTimer">Pausar</button>
-    <button id="resetTimer">Reiniciar</button>
-    <div id="timerDisplay" style="min-width:80px; text-align:center; font-weight:600;">00:00</div>
-  </div>
+<script src="https://cdn.jsdelivr.net/npm/ol@v7.4.0/dist/ol.js"></script>
+<script>
+// --- Mapas ---
+const dayLayer = new ol.layer.Tile({ source: new ol.source.XYZ({ url:'https://cartodb-basemaps-a.global.ssl.fastly.net/rastertiles/voyager/{z}/{x}/{y}.png' }) });
+const nightLayer = new ol.layer.Tile({ source: new ol.source.XYZ({ url:'https://cartodb-basemaps-a.global.ssl.fastly.net/rastertiles/dark_all/{z}/{x}/{y}.png' }), visible:false });
 
-  <button id="leftBtn" class="side-btn">Babor (coords)</button>
-  <button id="rightBtn" class="side-btn">Estribor (coords)</button>
+const map = new ol.Map({
+  target:'map',
+  layers:[dayLayer, nightLayer],
+  view:new ol.View({ center: ol.proj.fromLonLat([0,0]), zoom:3 })
+});
 
-  <div id="info">Distancia a línea: -- m | Tiempo a línea: -- | Diferencia: --</div>
+// --- Vectors ---
+const vectorSource = new ol.source.Vector();
+const vectorLayer = new ol.layer.Vector({ source: vectorSource });
+map.addLayer(vectorLayer);
 
-  <script>
-  // --- Utilidades ---
-  const R = 6378137;
-  function lonToX(lon){ return lon * Math.PI/180 * R }
-  function latToY(lat){ return Math.log(Math.tan((90+lat)*Math.PI/360)) * R }
-  function xyFromLonLat([lon,lat]){ return [lonToX(lon), latToY(lat)] }
-  function lonLatFromXY([x,y]){
-    const lon = x / R * 180/Math.PI;
-    const lat = (2*Math.atan(Math.exp(y/R)) - Math.PI/2) * 180/Math.PI;
-    return [lon,lat];
+// --- Styles ---
+const shipStyle = new ol.style.Style({ image: new ol.style.Icon({
+  src: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzNiIgaGVpZ2h0PSIzNiIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBmaWxsPSIjMGI1IiBkPSJNMTIgMmwzIDdoLTZ6Ii8+PHBhdGggZmlsbD0iIzA2NCIgZD0iTTUgMTJoMTRsLTEgNkg2bC0xLTZ6Ii8+PC9zdmc+',
+  scale:1.2, rotateWithView:true }) });
+const portStyle = new ol.style.Style({ image: new ol.style.Circle({ radius:8, fill:new ol.style.Fill({color:'#ff4d4d'}), stroke:new ol.style.Stroke({color:'#fff', width:2}) }) });
+const starStyle = new ol.style.Style({ image: new ol.style.Circle({ radius:8, fill:new ol.style.Fill({color:'#4da6ff'}), stroke:new ol.style.Stroke({color:'#fff', width:2}) }) });
+const lineStyle = new ol.style.Style({ stroke: new ol.style.Stroke({ color:'#ffbf00', width:4 }) });
+
+let shipFeature=null, portFeature=null, starFeature=null, lineFeature=null;
+
+// --- Barco ---
+function setShip(lonlat, headingDeg){
+  const offsetM = 11;
+  let finalLonLat=lonlat;
+  if(!isNaN(headingDeg)){
+    const theta=headingDeg*Math.PI/180;
+    const dx=offsetM*Math.sin(theta);
+    const dy=offsetM*Math.cos(theta);
+    const XY=[lonToX(lonlat[0])+dx, latToY(lonlat[1])+dy];
+    finalLonLat=[XY[0], XY[1]]; // usar coordenadas mercator
+    finalLonLat=lonLatFromXY(XY);
   }
-  function pointToSegmentDistance(p, a, b){
-    const P=xyFromLonLat(p), A=xyFromLonLat(a), B=xyFromLonLat(b);
-    const vx=B[0]-A[0], vy=B[1]-A[1]; const wx=P[0]-A[0], wy=P[1]-A[1];
-    const c1 = vx*wx+vy*wy;
-    if(c1<=0) return Math.hypot(P[0]-A[0],P[1]-A[1]);
-    const c2 = vx*vx+vy*vy;
-    if(c2<=c1) return Math.hypot(P[0]-B[0],P[1]-B[1]);
-    const t = c1/c2; const projx=A[0]+t*vx, projy=A[1]+t*vy;
-    return Math.hypot(P[0]-projx,P[1]-projy);
+  if(!shipFeature){
+    shipFeature=new ol.Feature(new ol.geom.Point(ol.proj.fromLonLat(finalLonLat)));
+    shipFeature.setStyle(shipStyle); vectorSource.addFeature(shipFeature);
+  } else {
+    shipFeature.getGeometry().setCoordinates(ol.proj.fromLonLat(finalLonLat));
   }
-  function formatSec(s){
-    const sign=s<0?'-':''; s=Math.abs(Math.round(s));
-    const mm=Math.floor(s/60), ss=s%60;
-    return `${sign}${mm}m${String(ss).padStart(2,'0')}s`;
-  }
+}
 
-  // --- Mapa ---
-  // Asegurarse de que el DOM esté completamente cargado antes de inicializar el mapa
-  document.addEventListener('DOMContentLoaded', function() {
-    const view = new ol.View({ 
-      center: ol.proj.fromLonLat([-3.70379, 40.4168]), // Centrado en Madrid como ejemplo
-      zoom: 10 
-    });
-    
-    const map = new ol.Map({
-      target: 'map',
-      layers: [ 
-        new ol.layer.Tile({ 
-          source: new ol.source.OSM({
-            // Añadir parámetros para evitar problemas de carga de teselas
-            crossOrigin: 'anonymous'
-          }) 
-        }) 
-      ],
-      view: view,
-      // Añadir controles por defecto para mejor usabilidad
-      controls: ol.control.defaults().extend([
-        new ol.control.Zoom(),
-        new ol.control.Rotate(),
-        new ol.control.Attribution()
-      ])
-    });
+// --- Marcas ---
+function addPort(lonlat){ if(portFeature) return; portFeature=new ol.Feature(new ol.geom.Point(ol.proj.fromLonLat(lonlat)));
+  portFeature.setStyle(portStyle); vectorSource.addFeature(portFeature); drawLineIfReady(); }
+function addStar(lonlat){ if(starFeature) return; starFeature=new ol.Feature(new ol.geom.Point(ol.proj.fromLonLat(lonlat)));
+  starFeature.setStyle(starStyle); vectorSource.addFeature(starFeature); drawLineIfReady(); }
+function drawLineIfReady(){ if(portFeature && starFeature){
+  if(lineFeature) vectorSource.removeFeature(lineFeature);
+  lineFeature=new ol.Feature(new ol.geom.LineString([portFeature.getGeometry().getCoordinates(), starFeature.getGeometry().getCoordinates()]));
+  lineFeature.setStyle(lineStyle); vectorSource.addFeature(lineFeature);
+}}
 
-    const vectorSource = new ol.source.Vector();
-    const vectorLayer = new ol.layer.Vector({ source: vectorSource });
-    map.addLayer(vectorLayer);
-
-    const shipStyle = new ol.style.Style({ image: new ol.style.Icon({
-      src:'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24"><path fill="#0b5" d="M12 2l3 7h-6l3-7z"/><path fill="#064" d="M5 12h14l-1 6H6l-1-6z"/></svg>',
-      scale:1.2, rotateWithView:true
-    }) });
-    const portStyle = new ol.style.Style({ image: new ol.style.Circle({ radius:8, fill:new ol.style.Fill({color:'#ff4d4d'}), stroke:new ol.style.Stroke({color:'#fff',width:2}) }) });
-    const starStyle = new ol.style.Style({ image: new ol.style.Circle({ radius:8, fill:new ol.style.Fill({color:'#4da6ff'}), stroke:new ol.style.Stroke({color:'#fff',width:2}) }) });
-    const lineStyle = new ol.style.Style({ stroke:new ol.style.Stroke({ color:'#ffbf00', width:4 }) });
-
-    let shipFeature=null, portFeature=null, starFeature=null, lineFeature=null;
-
-    function setShip(lonlat, headingDeg){
-      const offsetM = 11; // fijo hacia proa
-      let finalLonLat=lonlat;
-      if(!isNaN(headingDeg)){
-        const theta = headingDeg*Math.PI/180;
-        const dx = offsetM * Math.sin(theta); // hacia proa
-        const dy = offsetM * Math.cos(theta);
-        const XY = xyFromLonLat(lonlat);
-        const newXY=[XY[0]+dx, XY[1]+dy];
-        finalLonLat=lonLatFromXY(newXY);
-      }
-      if(!shipFeature){
-        shipFeature=new ol.Feature(new ol.geom.Point(ol.proj.fromLonLat(finalLonLat)));
-        shipFeature.setStyle(shipStyle); vectorSource.addFeature(shipFeature);
-      } else {
-        shipFeature.getGeometry().setCoordinates(ol.proj.fromLonLat(finalLonLat));
-      }
-      view.animate({ center: ol.proj.fromLonLat(finalLonLat), duration:400 });
-    }
-
-    function addPort(lonlat){
-      if(portFeature) return;
-      portFeature=new ol.Feature(new ol.geom.Point(ol.proj.fromLonLat(lonlat)));
-      portFeature.setStyle(portStyle); vectorSource.addFeature(portFeature); drawLineIfReady();
-    }
-    function addStar(lonlat){
-      if(starFeature) return;
-      starFeature=new ol.Feature(new ol.geom.Point(ol.proj.fromLonLat(lonlat)));
-      starFeature.setStyle(starStyle); vectorSource.addFeature(starFeature); drawLineIfReady();
-    }
-    function drawLineIfReady(){
-      if(portFeature && starFeature){
-        if(lineFeature) vectorSource.removeFeature(lineFeature);
-        const p=portFeature.getGeometry().getCoordinates();
-        const s=starFeature.getGeometry().getCoordinates();
-        lineFeature=new ol.Feature(new ol.geom.LineString([p,s]));
-        lineFeature.setStyle(lineStyle); vectorSource.addFeature(lineFeature);
-      }
-    }
-
-    // Long press
-    let pressTimer=null, pressCoord=null;
-    map.getViewport().addEventListener('pointerdown', e=>{
-      pressTimer=setTimeout(()=>{
-        pressCoord=map.getEventCoordinate(e);
-        showContext(e.clientX,e.clientY);
-      },600);
-    });
-    map.getViewport().addEventListener('pointerup',()=>{ if(pressTimer){clearTimeout(pressTimer);pressTimer=null;} });
-
-    function showContext(x,y){
-      const menu=document.createElement('div');
-      menu.className='context'; menu.style.left=x+'px'; menu.style.top=y+'px';
-      menu.innerHTML='<div style="font-weight:600;margin-bottom:6px">Poner marca</div>'+
-        '<button id="ctxPort">Babor</button> <button id="ctxStar">Estribor</button><br>'+
-        '<button id="ctxClose">Cerrar</button>';
-      document.body.appendChild(menu);
-      document.getElementById('ctxPort').onclick=()=>{addPort(ol.proj.toLonLat(pressCoord));menu.remove();};
-      document.getElementById('ctxStar').onclick=()=>{addStar(ol.proj.toLonLat(pressCoord));menu.remove();};
-      document.getElementById('ctxClose').onclick=()=>menu.remove();
-    }
-
-    // Botones coordenadas
-    document.getElementById('leftBtn').onclick=()=>{
-      const lat=parseFloat(prompt('Latitud (dec):'));
-      const lon=parseFloat(prompt('Longitud (dec):'));
-      if(!isNaN(lat)&&!isNaN(lon)) addPort([lon,lat]);
+// --- Long press ---
+let pressTimer=null, pressCoord=null;
+map.getViewport().addEventListener('pointerdown', e=>{
+  pressTimer=setTimeout(()=>{ pressCoord=map.getEventCoordinate(e); showContext(e.clientX,e.clientY); }, 600);
+});
+map.getViewport().addEventListener('pointerup', ()=>{ if(pressTimer){clearTimeout(pressTimer); pressTimer=null;} });
+function showContext(x,y){
+  const feature = map.forEachFeatureAtPixel([x,y], f=>f);
+  const menu=document.createElement('div'); menu.className='context'; menu.style.left=x+'px'; menu.style.top=y+'px';
+  if(feature===portFeature||feature===starFeature){
+    menu.innerHTML='<div style="font-weight:600;margin-bottom:6px">Marca</div><button id="ctxDel">Borrar</button><div style="height:6px"></div><button id="ctxClose">Cerrar</button>';
+    document.body.appendChild(menu);
+    document.getElementById('ctxDel').onclick=()=>{
+      vectorSource.removeFeature(feature);
+      if(feature===portFeature) portFeature=null; else starFeature=null;
+      if(lineFeature) vectorSource.removeFeature(lineFeature); lineFeature=null;
+      menu.remove();
     };
-    document.getElementById('rightBtn').onclick=()=>{
-      const lat=parseFloat(prompt('Latitud (dec):'));
-      const lon=parseFloat(prompt('Longitud (dec):'));
-      if(!isNaN(lat)&&!isNaN(lon)) addStar([lon,lat]);
-    };
+  } else {
+    menu.innerHTML='<div style="font-weight:600;margin-bottom:6px">Poner marca</div><button id="ctxPort">Babor</button> <button id="ctxStar">Estribor</button><div style="height:6px"></div><button id="ctxClose">Cerrar</button>';
+    document.body.appendChild(menu);
+    document.getElementById('ctxPort').onclick=()=>{ addPort(ol.proj.toLonLat(pressCoord)); menu.remove(); };
+    document.getElementById('ctxStar').onclick=()=>{ addStar(ol.proj.toLonLat(pressCoord)); menu.remove(); };
+  }
+  document.getElementById('ctxClose').onclick=()=>menu.remove();
+}
 
-    // Geolocalización
-    let watchId=null;
-    const latestState={ position:null, speed:null };
-    if('geolocation' in navigator){
-      watchId=navigator.geolocation.watchPosition(pos=>{
-        const lonlat=[pos.coords.longitude,pos.coords.latitude];
-        const heading=pos.coords.heading;
-        const speed=pos.coords.speed;
-        latestState.position=lonlat; latestState.speed=speed;
-        setShip(lonlat, heading!==null?heading:0);
-      }, err=>console.warn('GPS err',err), { enableHighAccuracy:true, maximumAge:1000, timeout:10000 });
-    } else {
-      console.warn('Geolocalización no soportada');
-      // Establecer una posición por defecto para pruebas
-      setShip([-3.70379, 40.4168], 0);
-    }
+// --- Botones coords ---
+document.getElementById('leftBtn').onclick=()=>{ const lat=parseFloat(prompt('Latitud (dec):')), lon=parseFloat(prompt('Longitud (dec):')); if(!isNaN(lat)&&!isNaN(lon)) addPort([lon,lat]); };
+document.getElementById('rightBtn').onclick=()=>{ const lat=parseFloat(prompt('Latitud (dec):')), lon=parseFloat(prompt('Longitud (dec):')); if(!isNaN(lat)&&!isNaN(lon)) addStar([lon,lat]); };
 
-    // Computos
-    function computeAndUpdate(){
-      const info=document.getElementById('info');
-      if(!latestState.position||!portFeature||!starFeature){
-        info.innerText='Distancia a línea: -- m | Tiempo a línea: -- | Diferencia: --'; return;
-      }
-      const p=ol.proj.toLonLat(portFeature.getGeometry().getCoordinates());
-      const s=ol.proj.toLonLat(starFeature.getGeometry().getCoordinates());
-      const pos=latestState.position;
-      const dist=pointToSegmentDistance(pos,p,s);
-      const speed=latestState.speed;
-      let timeToLine=null; if(speed&&speed>0) timeToLine=dist/speed;
-      const remaining=timer.remainingSeconds;
-      let diff=null; if(timeToLine!==null) diff=timeToLine-remaining;
-      info.innerText=`Distancia: ${dist.toFixed(1)} m | Tiempo: ${timeToLine?formatSec(timeToLine):'--'} | Dif: ${diff!==null?formatSec(diff):'--'}`;
-    }
-    setInterval(computeAndUpdate,900);
+// --- Modo noche ---
+document.getElementById('nightBtn').onclick=()=>{ nightLayer.setVisible(!nightLayer.getVisible()); dayLayer.setVisible(!nightLayer.getVisible()); };
 
-    // Timer
-    const timer={ totalSeconds:0, remainingSeconds:0, running:false, interval:null };
-    function startTimer(){
-      const mins=parseFloat(document.getElementById('countMin').value)||0;
-      if(!timer.running){
-        if(timer.remainingSeconds<=0) timer.remainingSeconds=Math.round(mins*60);
-        timer.running=true;
-        timer.interval=setInterval(()=>{
-          if(timer.remainingSeconds>0){ timer.remainingSeconds--; updateTimerDisplay(); }
-          else{ clearInterval(timer.interval); timer.running=false; }
-        },1000);
-      }
-    }
-    function pauseTimer(){ if(timer.running){ clearInterval(timer.interval); timer.running=false; } }
-    function resetTimer(){ pauseTimer(); timer.remainingSeconds=Math.round((parseFloat(document.getElementById('countMin').value)||0)*60); updateTimerDisplay(); }
-    function updateTimerDisplay(){
-      const d=timer.remainingSeconds; const mm=Math.floor(d/60); const ss=d%60;
-      document.getElementById('timerDisplay').innerText=`${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
-    }
-    document.getElementById('startTimer').onclick=()=>startTimer();
-    document.getElementById('pauseTimer').onclick=()=>pauseTimer();
-    document.getElementById('resetTimer').onclick=()=>resetTimer();
-    resetTimer();
+// --- Geolocalización ---
+let latestState={ position:null, speed:null, initialCentered:false };
+if(navigator.geolocation){
+  navigator.geolocation.watchPosition(pos=>{
+    document.getElementById('gpsError').style.display="none";
+    const lonlat=[pos.coords.longitude,pos.coords.latitude];
+    const heading = (pos.coords.heading!==null)?pos.coords.heading:0;
+    setShip(lonlat, heading);
+    latestState.position=lonlat;
+    latestState.speed=pos.coords.speed;
+    if(!latestState.initialCentered){ map.getView().animate({ center: ol.proj.fromLonLat(lonlat), zoom:15, duration:800 }); latestState.initialCentered=true; }
+  }, ()=>{ document.getElementById('gpsError').style.display="block"; }, { enableHighAccuracy:true, maximumAge:1000, timeout:10000 });
+} else { document.getElementById('gpsError').style.display="block"; }
 
-    window.addEventListener('beforeunload',()=>{ if(watchId!==null) navigator.geolocation.clearWatch(watchId); });
-  });
-  </script>
+// --- Distancias y tiempo ---
+function computeAndUpdate(){
+  const info=document.getElementById('info');
+  if(!latestState.position||!portFeature||!starFeature){ info.innerText='Dist: -- m | Tiempo línea: -- | Δ cuenta: --'; return; }
+  const p=ol.proj.toLonLat(portFeature.getGeometry().getCoordinates());
+  const s=ol.proj.toLonLat(starFeature.getGeometry().getCoordinates());
+  const dist=pointToSegmentDistance(latestState.position,p,s);
+  const speed=latestState.speed; let tLine=null;
+  if(speed>0) tLine=dist/speed;
+  let diff=null; if(tLine!==null) diff=tLine-timer.remainingSeconds;
+  info.innerText=`Dist: ${dist.toFixed(1)} m | Tiempo línea: ${tLine?formatSec(tLine):'--'} | Δ cuenta: ${diff!==null?formatSec(diff):'--'}`;
+}
+function formatSec(s){ const sign=s<0?'-':''; s=Math.abs(Math.round(s)); const mm=Math.floor(s/60), ss=s%60; return `${sign}${mm}m${String(ss).padStart(2,'0')}s`; }
+setInterval(computeAndUpdate,900);
+
+// --- Timer ---
+const timer={ remainingSeconds:0, running:false, interval:null };
+function startTimer(){ if(!timer.running){ if(timer.remainingSeconds<=0) resetTimer(); timer.running=true; timer.interval=setInterval(()=>{ if(timer.remainingSeconds>0){ timer.remainingSeconds--; updateTimerDisplay(); } else {clearInterval(timer.interval); timer.running=false;} },1000);} }
+function pauseTimer(){ if(timer.running){ clearInterval(timer.interval); timer.running=false; } }
+function resetTimer(){ pauseTimer(); timer.remainingSeconds=Math.round((parseFloat(document.getElementById('countMin').value)||0)*60); updateTimerDisplay(); }
+function updateTimerDisplay(){ const d=timer.remainingSeconds; const mm=Math.floor(d/60), ss=d%60; document.getElementById('timerDisplay').innerText=`${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`; }
+document.getElementById('startTimer').onclick=startTimer;
+document.getElementById('pauseTimer').onclick=pauseTimer;
+document.getElementById('resetTimer').onclick=resetTimer;
+resetTimer();
+
+window.addEventListener('beforeunload',()=>{});
+</script>
 </body>
 </html>
