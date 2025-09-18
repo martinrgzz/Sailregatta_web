@@ -50,7 +50,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/ol@v7.4.0/dist/ol.js"></script>
 <script>
-// --- Proyección helpers ---
 const R = 6378137;
 function lonToX(lon){ return lon * Math.PI/180 * R }
 function latToY(lat){ return Math.log(Math.tan((90+lat)*Math.PI/360)) * R }
@@ -59,18 +58,15 @@ function lonLatFromXY([x,y]){ const lon = x / R * 180/Math.PI; const lat = (2*Ma
 function haversine(a,b){ const toR=Math.PI/180; const [lon1,lat1]=a; const [lon2,lat2]=b; const dlat=(lat2-lat1)*toR; const dlon=(lon2-lon1)*toR; const A=Math.sin(dlat/2)**2 + Math.cos(lat1*toR)*Math.cos(lat2*toR)*Math.sin(dlon/2)**2; return R*2*Math.atan2(Math.sqrt(A),Math.sqrt(1-A)); }
 function pointToSegmentDistance(p,a,b){ const P=xyFromLonLat(p), A=xyFromLonLat(a), B=xyFromLonLat(b); const vx=B[0]-A[0], vy=B[1]-A[1]; const wx=P[0]-A[0], wy=P[1]-A[1]; const c1=vx*wx+vy*wy; if(c1<=0) return Math.hypot(P[0]-A[0], P[1]-A[1]); const c2=vx*vx+vy*vy; if(c2<=c1) return Math.hypot(P[0]-B[0], P[1]-B[1]); const t=c1/c2; const projx=A[0]+t*vx, projy=A[1]+t*vy; return Math.hypot(P[0]-projx, P[1]-projy); }
 
-// --- Mapas ---
 const dayLayer = new ol.layer.Tile({ source: new ol.source.XYZ({ url:'https://cartodb-basemaps-a.global.ssl.fastly.net/rastertiles/voyager/{z}/{x}/{y}.png' }) });
 const nightLayer = new ol.layer.Tile({ source: new ol.source.XYZ({ url:'https://cartodb-basemaps-a.global.ssl.fastly.net/rastertiles/dark_all/{z}/{x}/{y}.png' }), visible:false });
 
 const map = new ol.Map({ target:'map', layers:[dayLayer, nightLayer], view:new ol.View({ center: ol.proj.fromLonLat([0,0]), zoom:3 }) });
 
-// --- Vectors ---
 const vectorSource = new ol.source.Vector();
 const vectorLayer = new ol.layer.Vector({ source: vectorSource });
 map.addLayer(vectorLayer);
 
-// --- Estilos ---
 const shipStyle = new ol.style.Style({
   fill: new ol.style.Fill({ color:'#001f3f' }),
   stroke: new ol.style.Stroke({ color:'#ffffff', width:1 })
@@ -84,10 +80,9 @@ const lineStyle = new ol.style.Style({ stroke: new ol.style.Stroke({ color:'#ffb
 
 let shipFeature=null, headingLineFeature=null, portFeature=null, starFeature=null, lineFeature=null;
 
-// --- Barco a escala real ---
 function createShipGeometry(lonlat, headingDeg){
-  const L = 12;  // largo metros
-  const W = 3;   // ancho base
+  const L = 12;
+  const W = 3;
   const theta = headingDeg * Math.PI/180;
 
   const tip = [ lonToX(lonlat[0]) + L*Math.sin(theta),
@@ -117,7 +112,6 @@ function setShip(lonlat, headingDeg){
   }
   shipFeature.setGeometry(createShipGeometry(lonlat, headingDeg));
 
-  // Línea de proyección (~2 NM ≈ 3700 m)
   const distanceM = 3700;
   const theta = headingDeg * Math.PI / 180;
   const dx = distanceM * Math.sin(theta);
@@ -140,7 +134,6 @@ function setShip(lonlat, headingDeg){
   }
 }
 
-// --- Marcas ---
 function addPort(lonlat){ if(portFeature) return; portFeature=new ol.Feature(new ol.geom.Point(ol.proj.fromLonLat(lonlat)));
   portFeature.setStyle(portStyle); vectorSource.addFeature(portFeature); drawLineIfReady(); }
 function addStar(lonlat){ if(starFeature) return; starFeature=new ol.Feature(new ol.geom.Point(ol.proj.fromLonLat(lonlat)));
@@ -151,55 +144,106 @@ function drawLineIfReady(){ if(portFeature && starFeature){
   lineFeature.setStyle(lineStyle); vectorSource.addFeature(lineFeature);
 }}
 
-// --- Long press con un dedo ---
-let pressTimer=null, pressCoord=null, startPixel=null;
-const threshold=5;
-map.getViewport().addEventListener('pointerdown', e=>{
-  if(e.pointerType==="touch" && e.isPrimary && e.targetTouches?.length<=1){
-    startPixel=[e.clientX,e.clientY];
-    pressTimer=setTimeout(()=>{
-      pressCoord=map.getEventCoordinate(e);
-      showContext(e.clientX,e.clientY);
-    },600);
-  }
-});
-map.getViewport().addEventListener('pointermove', e=>{
-  if(pressTimer){
-    const dx=e.clientX-startPixel[0], dy=e.clientY-startPixel[1];
-    if(Math.hypot(dx,dy)>threshold){ clearTimeout(pressTimer); pressTimer=null; }
-  }
-});
-map.getViewport().addEventListener('pointerup', ()=>{ if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; } });
+let pressTimer = null;
+let pressCoord = null;
+let startPixel = null;
+const threshold = 5;
 
-function showContext(x,y){
-  const feature = map.forEachFeatureAtPixel([x,y], f=>f);
-  const menu=document.createElement('div'); menu.className='context'; menu.style.left=x+'px'; menu.style.top=y+'px';
-  if(feature===portFeature||feature===starFeature){
-    menu.innerHTML='<div style="font-weight:600;margin-bottom:6px">Marca</div><button id="ctxDel">Borrar</button><div style="height:6px"></div><button id="ctxClose">Cerrar</button>';
+function handlePointerStart(e) {
+  if ((e.pointerType === "touch" || e.type === "touchstart") && 
+      (!e.targetTouches || e.targetTouches.length <= 1)) {
+    startPixel = [e.clientX, e.clientY];
+    pressTimer = setTimeout(function() {
+      const coordinate = map.getEventCoordinate(e);
+      pressCoord = coordinate;
+      showContext(e.clientX, e.clientY);
+    }, 600);
+    e.preventDefault();
+  }
+}
+
+function handlePointerMove(e) {
+  if (pressTimer) {
+    const dx = e.clientX - startPixel[0];
+    const dy = e.clientY - startPixel[1];
+    if (Math.hypot(dx, dy) > threshold) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    }
+  }
+}
+
+function handlePointerEnd() {
+  if (pressTimer) {
+    clearTimeout(pressTimer);
+    pressTimer = null;
+  }
+}
+
+map.getViewport().addEventListener('pointerdown', handlePointerStart);
+map.getViewport().addEventListener('touchstart', handlePointerStart);
+map.getViewport().addEventListener('pointermove', handlePointerMove);
+map.getViewport().addEventListener('touchmove', handlePointerMove);
+map.getViewport().addEventListener('pointerup', handlePointerEnd);
+map.getViewport().addEventListener('touchend', handlePointerEnd);
+map.getViewport().addEventListener('pointercancel', handlePointerEnd);
+map.getViewport().addEventListener('touchcancel', handlePointerEnd);
+
+function showContext(x, y) {
+  const existingMenu = document.querySelector('.context');
+  if (existingMenu) {
+    existingMenu.remove();
+  }
+
+  const pixel = [x, y];
+  const feature = map.forEachFeatureAtPixel(pixel, function(feat) {
+    return feat;
+  });
+
+  const menu = document.createElement('div');
+  menu.className = 'context';
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+
+  if (feature === portFeature || feature === starFeature) {
+    menu.innerHTML = '<div style="font-weight:600;margin-bottom:6px">Marca</div><button id="ctxDel">Borrar</button><div style="height:6px"></div><button id="ctxClose">Cerrar</button>';
     document.body.appendChild(menu);
-    document.getElementById('ctxDel').onclick=()=>{
+    
+    document.getElementById('ctxDel').onclick = function() {
       vectorSource.removeFeature(feature);
-      if(feature===portFeature) portFeature=null; else starFeature=null;
-      if(lineFeature) vectorSource.removeFeature(lineFeature); lineFeature=null;
+      if (feature === portFeature) portFeature = null;
+      else starFeature = null;
+      if (lineFeature) {
+        vectorSource.removeFeature(lineFeature);
+        lineFeature = null;
+      }
       menu.remove();
     };
   } else {
-    menu.innerHTML='<div style="font-weight:600;margin-bottom:6px">Poner marca</div><button id="ctxPort">Babor</button> <button id="ctxStar">Estribor</button><div style="height:6px"></div><button id="ctxClose">Cerrar</button>';
+    menu.innerHTML = '<div style="font-weight:600;margin-bottom:6px">Poner marca</div><button id="ctxPort">Babor</button> <button id="ctxStar">Estribor</button><div style="height:6px"></div><button id="ctxClose">Cerrar</button>';
     document.body.appendChild(menu);
-    document.getElementById('ctxPort').onclick=()=>{ addPort(ol.proj.toLonLat(pressCoord)); menu.remove(); };
-    document.getElementById('ctxStar').onclick=()=>{ addStar(ol.proj.toLonLat(pressCoord)); menu.remove(); };
+    
+    document.getElementById('ctxPort').onclick = function() {
+      addPort(ol.proj.toLonLat(pressCoord));
+      menu.remove();
+    };
+    
+    document.getElementById('ctxStar').onclick = function() {
+      addStar(ol.proj.toLonLat(pressCoord));
+      menu.remove();
+    };
   }
-  document.getElementById('ctxClose').onclick=()=>menu.remove();
+  
+  document.getElementById('ctxClose').onclick = function() {
+    menu.remove();
+  };
 }
 
-// --- Botones coords ---
 document.getElementById('leftBtn').onclick=()=>{ const lat=parseFloat(prompt('Latitud (dec):')), lon=parseFloat(prompt('Longitud (dec):')); if(!isNaN(lat)&&!isNaN(lon)) addPort([lon,lat]); };
 document.getElementById('rightBtn').onclick=()=>{ const lat=parseFloat(prompt('Latitud (dec):')), lon=parseFloat(prompt('Longitud (dec):')); if(!isNaN(lat)&&!isNaN(lon)) addStar([lon,lat]); };
 
-// --- Modo noche ---
 document.getElementById('nightBtn').onclick=()=>{ nightLayer.setVisible(!nightLayer.getVisible()); dayLayer.setVisible(!nightLayer.getVisible()); };
 
-// --- Geolocalización ---
 let latestState={ position:null, speed:null, initialCentered:false };
 if(navigator.geolocation){
   navigator.geolocation.watchPosition(pos=>{
@@ -213,7 +257,6 @@ if(navigator.geolocation){
   }, ()=>{ document.getElementById('gpsError').style.display="block"; }, { enableHighAccuracy:true, maximumAge:1000, timeout:10000 });
 } else { document.getElementById('gpsError').style.display="block"; }
 
-// --- Distancias y tiempo ---
 function computeAndUpdate(){
   const info=document.getElementById('info');
   if(!latestState.position||!portFeature||!starFeature){ info.innerText='Dist: -- m | Tiempo línea: -- | Δ cuenta: --'; return; }
@@ -228,7 +271,6 @@ function computeAndUpdate(){
 function formatSec(s){ const sign=s<0?'-':''; s=Math.abs(Math.round(s)); const mm=Math.floor(s/60), ss=s%60; return `${sign}${mm}m${String(ss).padStart(2,'0')}s`; }
 setInterval(computeAndUpdate,900);
 
-// --- Timer ---
 const timer={ remainingSeconds:0, running:false, interval:null };
 function startTimer(){ if(!timer.running){ if(timer.remainingSeconds<=0) resetTimer(); timer.running=true; timer.interval=setInterval(()=>{ if(timer.remainingSeconds>0){ timer.remainingSeconds--; updateTimerDisplay(); } else {clearInterval(timer.interval); timer.running=false;} },1000);} }
 function pauseTimer(){ if(timer.running){ clearInterval(timer.interval); timer.running=false; } }
