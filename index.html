@@ -148,10 +148,12 @@ let pressTimer = null;
 let pressCoord = null;
 let startPixel = null;
 const threshold = 5;
+let isTouchDevice = false;
 
 function handlePointerStart(e) {
-  if ((e.pointerType === "touch" || e.type === "touchstart") && 
-      (!e.targetTouches || e.targetTouches.length <= 1)) {
+  // Solo activar para dispositivos táctiles
+  if (e.pointerType === "touch" || e.type === "touchstart") {
+    isTouchDevice = true;
     startPixel = [e.clientX, e.clientY];
     pressTimer = setTimeout(function() {
       const coordinate = map.getEventCoordinate(e);
@@ -163,7 +165,7 @@ function handlePointerStart(e) {
 }
 
 function handlePointerMove(e) {
-  if (pressTimer) {
+  if (pressTimer && isTouchDevice) {
     const dx = e.clientX - startPixel[0];
     const dy = e.clientY - startPixel[1];
     if (Math.hypot(dx, dy) > threshold) {
@@ -174,19 +176,17 @@ function handlePointerMove(e) {
 }
 
 function handlePointerEnd() {
-  if (pressTimer) {
+  if (pressTimer && isTouchDevice) {
     clearTimeout(pressTimer);
     pressTimer = null;
   }
+  isTouchDevice = false;
 }
 
-map.getViewport().addEventListener('pointerdown', handlePointerStart);
+// Solo agregar event listeners para touch
 map.getViewport().addEventListener('touchstart', handlePointerStart);
-map.getViewport().addEventListener('pointermove', handlePointerMove);
 map.getViewport().addEventListener('touchmove', handlePointerMove);
-map.getViewport().addEventListener('pointerup', handlePointerEnd);
 map.getViewport().addEventListener('touchend', handlePointerEnd);
-map.getViewport().addEventListener('pointercancel', handlePointerEnd);
 map.getViewport().addEventListener('touchcancel', handlePointerEnd);
 
 function showContext(x, y) {
